@@ -100,68 +100,37 @@ async function buscarProposicoes() {
   });
 
   try {
-    // Navega primeiro para a raiz para o Angular inicializar
+    // Passo 1: carrega a página inicial
     console.log('🌐 Carregando portal...');
     await page.goto('https://consultas.assembleia.pr.leg.br/', {
       waitUntil: 'domcontentloaded',
       timeout: 60000
     });
+    await page.waitForTimeout(8000);
 
-    console.log('⏳ Aguardando app inicializar (10s)...');
-    await page.waitForTimeout(10000);
-
-    // Loga o HTML atual para debug
-    const bodyText = await page.evaluate(() => document.body ? document.body.innerText.substring(0, 500) : 'VAZIO');
-    console.log('📄 Conteúdo da página:', bodyText);
-
-    // Tenta navegar para a rota de pesquisa via hash
-    console.log('🔀 Navegando para pesquisa...');
-    await page.evaluate(() => {
-      window.location.hash = '/pesquisa-legislativa';
-    });
-
+    // Passo 2: clica no card "Proposição"
+    console.log('🖱️ Clicando no card Proposição...');
+    await page.click('a:has-text("Proposição")');
     await page.waitForTimeout(5000);
 
-    const bodyText2 = await page.evaluate(() => document.body ? document.body.innerText.substring(0, 500) : 'VAZIO');
-    console.log('📄 Conteúdo após navegação:', bodyText2);
+    // Loga o que apareceu depois do clique
+    const bodyApos = await page.evaluate(() => document.body.innerText.substring(0, 300));
+    console.log('📄 Página após clicar em Proposição:', bodyApos);
 
-    // Lista todos os elementos interativos
-    const elementos = await page.$$eval('button, input, select, a', els =>
-      els.map(e => ({
-        tag: e.tagName,
-        text: e.innerText?.trim().substring(0, 30),
-        cls: e.className?.substring(0, 50),
-        id: e.id
-      })).filter(e => e.text || e.id)
+    // Lista botões disponíveis
+    const botoes = await page.$$eval('button', els =>
+      els.map(b => ({ text: b.innerText.trim().substring(0, 40), cls: b.className.substring(0, 60) }))
     );
-    console.log('🔎 Elementos encontrados:', JSON.stringify(elementos.slice(0, 20)));
+    console.log('🔎 Botões na página:', JSON.stringify(botoes));
 
-    // Tenta clicar no botão de pesquisa
-    const seletores = [
-      'button.btn-search',
-      'button[class*="search"]',
-      'button[class*="btn-primary"]',
-      'button:has-text("Pesquisar")',
-      'input[type="submit"]',
-    ];
+    // Passo 3: clica no botão Pesquisar
+    console.log('🔍 Aguardando botão Pesquisar...');
+    await page.waitForSelector('button.btn-search', { timeout: 20000 });
+    await page.click('button.btn-search');
+    console.log('✅ Clicou em Pesquisar');
 
-    let clicou = false;
-    for (const seletor of seletores) {
-      try {
-        const el = await page.$(seletor);
-        if (el) {
-          await el.click();
-          console.log(`✅ Clicou com seletor: ${seletor}`);
-          clicou = true;
-          break;
-        }
-      } catch (e) {}
-    }
-
-    if (!clicou) {
-      console.log('⚠️ Nenhum botão de pesquisa encontrado');
-    }
-
+    // Passo 4: aguarda resultados
+    console.log('⏳ Aguardando resultados...');
     await page.waitForTimeout(20000);
 
     // Fallback: extrai da tabela HTML

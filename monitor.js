@@ -5,7 +5,7 @@ const nodemailer = require('nodemailer');
 // ─── CONFIGURAÇÕES ────────────────────────────────────────────────────────────
 const EMAIL_DESTINO = process.env.EMAIL_DESTINO;
 const EMAIL_REMETENTE = process.env.EMAIL_REMETENTE;
-const EMAIL_SENHA = process.env.EMAIL_SENHA; // App Password do Gmail
+const EMAIL_SENHA = process.env.EMAIL_SENHA;
 const ARQUIVO_ESTADO = 'estado.json';
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
@@ -89,7 +89,6 @@ async function buscarProposicoes() {
     if (url.includes('/api/public/geral/recaptcha') && url.includes('/proposicao')) {
       try {
         const json = await response.json();
-        // A resposta pode ser array direto ou objeto com content/data
         const lista = Array.isArray(json) ? json :
                       json.content ? json.content :
                       json.data ? json.data : [];
@@ -110,31 +109,25 @@ async function buscarProposicoes() {
       timeout: 60000
     });
 
-    await page.waitForTimeout(3000);
+    // Espera o Angular renderizar completamente
+    console.log('⏳ Aguardando Angular renderizar...');
+    await page.waitForTimeout(8000);
 
-    // Pega o ano atual
-    const anoAtual = new Date().getFullYear().toString();
-
-    // Tenta preencher campo de ano (pesquisa por ano atual)
-    try {
-      const campoAno = await page.$('input[placeholder*="no"], input[id*="ano"], select[id*="ano"]');
-      if (campoAno) {
-        await campoAno.fill(anoAtual);
-        console.log(`📅 Preencheu ano: ${anoAtual}`);
-      }
-    } catch (e) {
-      console.log('Campo ano não encontrado, pesquisando sem filtro de ano');
-    }
+    // Loga todos os botões visíveis para debug
+    const botoes = await page.$$eval('button', els =>
+      els.map(b => ({ text: b.innerText.trim(), cls: b.className }))
+    );
+    console.log('🔎 Botões encontrados:', JSON.stringify(botoes));
 
     // Aguarda o botão aparecer e clica
     console.log('🔍 Aguardando botão Pesquisar...');
-    await page.waitForSelector('button.btn-search', { timeout: 15000 });
+    await page.waitForSelector('button.btn-search', { timeout: 30000 });
     await page.click('button.btn-search');
     console.log('✅ Clicou em Pesquisar');
 
-    // Aguarda resposta da API (até 45s para o reCAPTCHA ser resolvido)
+    // Aguarda resposta da API
     console.log('⏳ Aguardando resultados...');
-    await page.waitForTimeout(15000);
+    await page.waitForTimeout(20000);
 
     // Tenta extrair da tabela de resultados caso interceptação não funcionou
     if (proposicoes.length === 0) {
@@ -166,7 +159,6 @@ async function buscarProposicoes() {
 
 // ─── NORMALIZA proposição para ID único ───────────────────────────────────────
 function gerarId(p) {
-  // Tenta campos da API JSON primeiro, depois HTML
   return (
     p.id ||
     p.idProposicao ||
@@ -209,8 +201,6 @@ function normalizarProposicao(p) {
 
   if (novas.length > 0) {
     await enviarEmail(novas);
-
-    // Atualiza estado
     novas.forEach(p => idsVistos.add(p.id));
     estado.proposicoes_vistas = Array.from(idsVistos);
     estado.ultima_execucao = new Date().toISOString();

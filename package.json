@@ -1,0 +1,13 @@
+{
+  "name": "alep-monitor",
+  "version": "1.0.0",
+  "description": "Monitor de proposições da Assembleia Legislativa do Paraná",
+  "main": "monitor.js",
+  "scripts": {
+    "start": "node monitor.js"
+  },
+  "dependencies": {
+    "nodemailer": "^6.9.9",
+    "playwright": "^1.44.0"
+  }
+}

@@ -1,0 +1,57 @@
+name: Monitor Proposições PR
+
+on:
+  schedule:
+    # Roda 4x por dia: 8h, 12h, 17h e 21h (horário de Brasília = UTC-3)
+    - cron: '0 11 * * *'   # 08:00 BRT
+    - cron: '0 15 * * *'   # 12:00 BRT
+    - cron: '0 20 * * *'   # 17:00 BRT
+    - cron: '0 0 * * *'    # 21:00 BRT
+  workflow_dispatch:        # Permite rodar manualmente
+
+jobs:
+  monitorar:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write       # Necessário para salvar estado.json no repositório
+
+    steps:
+      - name: Checkout do repositório
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Instalar dependências
+        run: npm install
+
+      - name: Instalar navegador Playwright
+        run: npx playwright install chromium --with-deps
+
+      - name: Restaurar estado anterior (se existir)
+        run: |
+          if [ -f estado.json ]; then
+            echo "✅ Estado encontrado:"
+            cat estado.json | python3 -c "import json,sys; d=json.load(sys.stdin); print(f'  Proposições já vistas: {len(d.get(\"proposicoes_vistas\",[]))}')"
+          else
+            echo "📋 Primeiro run — estado zerado"
+          fi
+
+      - name: Executar monitor
+        env:
+          EMAIL_REMETENTE: ${{ secrets.EMAIL_REMETENTE }}
+          EMAIL_SENHA: ${{ secrets.EMAIL_SENHA }}
+          EMAIL_DESTINO: ${{ secrets.EMAIL_DESTINO }}
+        run: node monitor.js
+
+      - name: Salvar estado atualizado no repositório
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add estado.json
+          git diff --staged --quiet || git commit -m "chore: atualiza estado [skip ci]"
+          git push

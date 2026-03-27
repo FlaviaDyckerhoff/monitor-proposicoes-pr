@@ -2,18 +2,17 @@ name: Monitor Proposições PR
 
 on:
   schedule:
-    # Roda 4x por dia: 8h, 12h, 17h e 21h (horário de Brasília = UTC-3)
     - cron: '0 11 * * *'   # 08:00 BRT
     - cron: '0 15 * * *'   # 12:00 BRT
     - cron: '0 20 * * *'   # 17:00 BRT
     - cron: '0 0 * * *'    # 21:00 BRT
-  workflow_dispatch:        # Permite rodar manualmente
+  workflow_dispatch:
 
 jobs:
   monitorar:
     runs-on: ubuntu-latest
     permissions:
-      contents: write       # Necessário para salvar estado.json no repositório
+      contents: write
 
     steps:
       - name: Checkout do repositório
@@ -29,18 +28,6 @@ jobs:
       - name: Instalar dependências
         run: npm install
 
-      - name: Instalar navegador Playwright
-        run: npx playwright install chromium --with-deps
-
-      - name: Restaurar estado anterior (se existir)
-        run: |
-          if [ -f estado.json ]; then
-            echo "✅ Estado encontrado:"
-            cat estado.json | python3 -c "import json,sys; d=json.load(sys.stdin); print(f'  Proposições já vistas: {len(d.get(\"proposicoes_vistas\",[]))}')"
-          else
-            echo "📋 Primeiro run — estado zerado"
-          fi
-
       - name: Executar monitor
         env:
           EMAIL_REMETENTE: ${{ secrets.EMAIL_REMETENTE }}
@@ -54,7 +41,6 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           if [ ! -f estado.json ]; then
             echo '{"proposicoes_vistas":[],"ultima_execucao":""}' > estado.json
-            echo "criado estado vazio"
           fi
           git add estado.json
           git diff --staged --quiet || git commit -m "chore: atualiza estado [skip ci]"

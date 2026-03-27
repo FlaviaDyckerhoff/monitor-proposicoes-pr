@@ -108,29 +108,40 @@ async function buscarProposicoes() {
     });
     await page.waitForTimeout(8000);
 
-    // Passo 2: navega direto para a rota de proposição
-    console.log('🔀 Navegando para pesquisa de proposições...');
-    await page.goto('https://consultas.assembleia.pr.leg.br/#/pesquisa-legislativa/proposicao', {
-      waitUntil: 'domcontentloaded',
-      timeout: 30000
+    // Passo 2: navega para proposição via hash (mantém Angular vivo)
+    console.log('🔀 Navegando para proposição via hash...');
+    await page.evaluate(() => {
+      window.location.hash = '/pesquisa-legislativa/proposicao';
     });
     await page.waitForTimeout(8000);
 
-    // Loga o que apareceu depois do clique
-    const bodyApos = await page.evaluate(() => document.body.innerText.substring(0, 300));
-    console.log('📄 Página após clicar em Proposição:', bodyApos);
+    // Loga o conteúdo para debug
+    const bodyApos = await page.evaluate(() => document.body.innerText.substring(0, 400));
+    console.log('📄 Conteúdo após navegação:', bodyApos);
 
-    // Lista botões disponíveis
+    // Lista todos os botões
     const botoes = await page.$$eval('button', els =>
       els.map(b => ({ text: b.innerText.trim().substring(0, 40), cls: b.className.substring(0, 60) }))
     );
     console.log('🔎 Botões na página:', JSON.stringify(botoes));
 
-    // Passo 3: clica no botão Pesquisar
-    console.log('🔍 Aguardando botão Pesquisar...');
-    await page.waitForSelector('button.btn-search', { timeout: 20000 });
-    await page.click('button.btn-search');
-    console.log('✅ Clicou em Pesquisar');
+    // Passo 3: tenta múltiplos seletores para o botão pesquisar
+    console.log('🔍 Procurando botão Pesquisar...');
+    const seletores = ['button.btn-search', 'button[class*="search"]', 'button[class*="primary"]', 'button[type="button"]'];
+    let clicou = false;
+    for (const s of seletores) {
+      const el = await page.$(s);
+      if (el) {
+        const visivel = await el.isVisible();
+        if (visivel) {
+          await el.click();
+          console.log('✅ Clicou com seletor: ' + s);
+          clicou = true;
+          break;
+        }
+      }
+    }
+    if (!clicou) console.log('⚠️ Nenhum botão visível encontrado');
 
     // Passo 4: aguarda resultados
     console.log('⏳ Aguardando resultados...');

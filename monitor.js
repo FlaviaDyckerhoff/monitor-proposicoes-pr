@@ -127,10 +127,10 @@ async function buscarProposicoes() {
     }
 
     // Espera o reCAPTCHA carregar e clica no botão pesquisar
-    console.log('🔍 Clicando em Pesquisar...');
-    const botaoPesquisar = await page.$('button[type="submit"], button:has-text("Pesquisar"), button:has-text("pesquisar")');
-    if (botaoPesquisar) {
-      await botaoPesquisar.click();
+        console.log('🔍 Aguardando botão Pesquisar...');
+    await page.waitForSelector('button.btn-search', { timeout: 15000 });
+    await page.click('button.btn-search');
+    console.log('✅ Clicou em Pesquisar');
     } else {
       // Fallback: procura qualquer botão primário
       await page.click('button.btn-primary, .btn-pesquisar, button[class*="primary"]');

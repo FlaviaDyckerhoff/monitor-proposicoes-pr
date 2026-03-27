@@ -2,13 +2,11 @@ const { chromium } = require('playwright');
 const fs = require('fs');
 const nodemailer = require('nodemailer');
 
-// ─── CONFIGURAÇÕES ────────────────────────────────────────────────────────────
 const EMAIL_DESTINO = process.env.EMAIL_DESTINO;
 const EMAIL_REMETENTE = process.env.EMAIL_REMETENTE;
 const EMAIL_SENHA = process.env.EMAIL_SENHA;
 const ARQUIVO_ESTADO = 'estado.json';
 
-// ─── HELPERS ──────────────────────────────────────────────────────────────────
 function carregarEstado() {
   if (fs.existsSync(ARQUIVO_ESTADO)) {
     return JSON.parse(fs.readFileSync(ARQUIVO_ESTADO, 'utf8'));
@@ -23,10 +21,7 @@ function salvarEstado(estado) {
 async function enviarEmail(novas) {
   const transporter = nodemailer.createTransport({
     service: 'gmail',
-    auth: {
-      user: EMAIL_REMETENTE,
-      pass: EMAIL_SENHA,
-    },
+    auth: { user: EMAIL_REMETENTE, pass: EMAIL_SENHA },
   });
 
   const linhas = novas.map(p =>
@@ -73,20 +68,24 @@ async function enviarEmail(novas) {
   console.log(`✅ Email enviado com ${novas.length} proposições novas.`);
 }
 
-// ─── SCRAPER ──────────────────────────────────────────────────────────────────
 async function buscarProposicoes() {
   const browser = await chromium.launch({
     headless: true,
-    args: ['--no-sandbox', '--disable-setuid-sandbox']
+    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-web-security']
   });
 
-  const page = await browser.newPage();
+  const context = await browser.newContext({
+    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    javaScriptEnabled: true,
+  });
+
+  const page = await context.newPage();
   const proposicoes = [];
 
-  // Intercepta as respostas da API de proposições
+  // Intercepta respostas da API
   page.on('response', async (response) => {
     const url = response.url();
-    if (url.includes('/api/public/geral/recaptcha') && url.includes('/proposicao')) {
+    if (url.includes('/proposicao') && url.includes('recaptcha')) {
       try {
         const json = await response.json();
         const lista = Array.isArray(json) ? json :
@@ -96,40 +95,76 @@ async function buscarProposicoes() {
           proposicoes.push(...lista);
           console.log(`📦 Capturadas ${lista.length} proposições via API`);
         }
-      } catch (e) {
-        // não era JSON de proposições
-      }
+      } catch (e) {}
     }
   });
 
   try {
-    console.log('🌐 Abrindo portal da ALEP...');
-    await page.goto('https://consultas.assembleia.pr.leg.br/#/pesquisa-legislativa', {
-      waitUntil: 'networkidle',
+    // Navega primeiro para a raiz para o Angular inicializar
+    console.log('🌐 Carregando portal...');
+    await page.goto('https://consultas.assembleia.pr.leg.br/', {
+      waitUntil: 'domcontentloaded',
       timeout: 60000
     });
 
-    // Espera o Angular renderizar completamente
-    console.log('⏳ Aguardando Angular renderizar...');
-    await page.waitForTimeout(8000);
+    console.log('⏳ Aguardando app inicializar (10s)...');
+    await page.waitForTimeout(10000);
 
-    // Loga todos os botões visíveis para debug
-    const botoes = await page.$$eval('button', els =>
-      els.map(b => ({ text: b.innerText.trim(), cls: b.className }))
+    // Loga o HTML atual para debug
+    const bodyText = await page.evaluate(() => document.body ? document.body.innerText.substring(0, 500) : 'VAZIO');
+    console.log('📄 Conteúdo da página:', bodyText);
+
+    // Tenta navegar para a rota de pesquisa via hash
+    console.log('🔀 Navegando para pesquisa...');
+    await page.evaluate(() => {
+      window.location.hash = '/pesquisa-legislativa';
+    });
+
+    await page.waitForTimeout(5000);
+
+    const bodyText2 = await page.evaluate(() => document.body ? document.body.innerText.substring(0, 500) : 'VAZIO');
+    console.log('📄 Conteúdo após navegação:', bodyText2);
+
+    // Lista todos os elementos interativos
+    const elementos = await page.$$eval('button, input, select, a', els =>
+      els.map(e => ({
+        tag: e.tagName,
+        text: e.innerText?.trim().substring(0, 30),
+        cls: e.className?.substring(0, 50),
+        id: e.id
+      })).filter(e => e.text || e.id)
     );
-    console.log('🔎 Botões encontrados:', JSON.stringify(botoes));
+    console.log('🔎 Elementos encontrados:', JSON.stringify(elementos.slice(0, 20)));
 
-    // Aguarda o botão aparecer e clica
-    console.log('🔍 Aguardando botão Pesquisar...');
-    await page.waitForSelector('button.btn-search', { timeout: 30000 });
-    await page.click('button.btn-search');
-    console.log('✅ Clicou em Pesquisar');
+    // Tenta clicar no botão de pesquisa
+    const seletores = [
+      'button.btn-search',
+      'button[class*="search"]',
+      'button[class*="btn-primary"]',
+      'button:has-text("Pesquisar")',
+      'input[type="submit"]',
+    ];
 
-    // Aguarda resposta da API
-    console.log('⏳ Aguardando resultados...');
+    let clicou = false;
+    for (const seletor of seletores) {
+      try {
+        const el = await page.$(seletor);
+        if (el) {
+          await el.click();
+          console.log(`✅ Clicou com seletor: ${seletor}`);
+          clicou = true;
+          break;
+        }
+      } catch (e) {}
+    }
+
+    if (!clicou) {
+      console.log('⚠️ Nenhum botão de pesquisa encontrado');
+    }
+
     await page.waitForTimeout(20000);
 
-    // Tenta extrair da tabela de resultados caso interceptação não funcionou
+    // Fallback: extrai da tabela HTML
     if (proposicoes.length === 0) {
       console.log('🔎 Tentando extrair da tabela HTML...');
       const linhasTabela = await page.$$eval('table tbody tr', rows =>
@@ -157,7 +192,6 @@ async function buscarProposicoes() {
   return proposicoes;
 }
 
-// ─── NORMALIZA proposição para ID único ───────────────────────────────────────
 function gerarId(p) {
   return (
     p.id ||
@@ -178,7 +212,6 @@ function normalizarProposicao(p) {
   };
 }
 
-// ─── MAIN ─────────────────────────────────────────────────────────────────────
 (async () => {
   console.log('🚀 Iniciando monitor ALEP...');
   console.log(`⏰ ${new Date().toLocaleString('pt-BR')}`);

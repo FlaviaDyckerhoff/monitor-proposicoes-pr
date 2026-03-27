@@ -24,15 +24,27 @@ async function enviarEmail(novas) {
     auth: { user: EMAIL_REMETENTE, pass: EMAIL_SENHA },
   });
 
-  const linhas = novas.map(p =>
-    `<tr>
-      <td style="padding:8px;border-bottom:1px solid #eee">${p.tipo || '-'}</td>
-      <td style="padding:8px;border-bottom:1px solid #eee"><strong>${p.numero || '-'}/${p.ano || '-'}</strong></td>
-      <td style="padding:8px;border-bottom:1px solid #eee">${p.autor || '-'}</td>
-      <td style="padding:8px;border-bottom:1px solid #eee">${p.data || '-'}</td>
-      <td style="padding:8px;border-bottom:1px solid #eee">${p.ementa || '-'}</td>
-    </tr>`
-  ).join('');
+  // Agrupa por tipo
+  const porTipo = {};
+  novas.forEach(p => {
+    const tipo = p.tipo || 'OUTROS';
+    if (!porTipo[tipo]) porTipo[tipo] = [];
+    porTipo[tipo].push(p);
+  });
+
+  const linhas = Object.keys(porTipo).sort().map(tipo => {
+    const header = `<tr><td colspan="5" style="padding:10px 8px 4px;background:#f0f4f8;font-weight:bold;color:#1a3a5c;font-size:13px;border-top:2px solid #1a3a5c">${tipo} — ${porTipo[tipo].length} proposição(ões)</td></tr>`;
+    const rows = porTipo[tipo].map(p =>
+      `<tr>
+        <td style="padding:8px;border-bottom:1px solid #eee;color:#555;font-size:12px">${p.tipo || '-'}</td>
+        <td style="padding:8px;border-bottom:1px solid #eee"><strong>${p.numero || '-'}/${p.ano || '-'}</strong></td>
+        <td style="padding:8px;border-bottom:1px solid #eee;font-size:12px">${p.autor || '-'}</td>
+        <td style="padding:8px;border-bottom:1px solid #eee;font-size:12px;white-space:nowrap">${p.data || '-'}</td>
+        <td style="padding:8px;border-bottom:1px solid #eee;font-size:12px">${p.ementa || '-'}</td>
+      </tr>`
+    ).join('');
+    return header + rows;
+  }).join('');
 
   const html = `
     <div style="font-family:Arial,sans-serif;max-width:900px;margin:0 auto">
@@ -147,6 +159,12 @@ function normalizarProposicao(p) {
   console.log(`🆕 Proposições novas: ${novas.length}`);
 
   if (novas.length > 0) {
+    // Ordena por tipo alfabético, depois por número decrescente dentro de cada tipo
+    novas.sort((a, b) => {
+      if (a.tipo < b.tipo) return -1;
+      if (a.tipo > b.tipo) return 1;
+      return (parseInt(b.numero) || 0) - (parseInt(a.numero) || 0);
+    });
     await enviarEmail(novas);
     novas.forEach(p => idsVistos.add(p.id));
     estado.proposicoes_vistas = Array.from(idsVistos);

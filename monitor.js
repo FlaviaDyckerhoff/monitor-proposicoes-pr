@@ -1,4 +1,3 @@
-const { chromium } = require('playwright');
 const fs = require('fs');
 const nodemailer = require('nodemailer');
 
@@ -6,6 +5,7 @@ const EMAIL_DESTINO = process.env.EMAIL_DESTINO;
 const EMAIL_REMETENTE = process.env.EMAIL_REMETENTE;
 const EMAIL_SENHA = process.env.EMAIL_SENHA;
 const ARQUIVO_ESTADO = 'estado.json';
+const API_BASE = 'http://webservices.assembleia.pr.leg.br/api/public';
 
 function carregarEstado() {
   if (fs.existsSync(ARQUIVO_ESTADO)) {
@@ -27,7 +27,7 @@ async function enviarEmail(novas) {
   const linhas = novas.map(p =>
     `<tr>
       <td style="padding:8px;border-bottom:1px solid #eee">${p.tipo || '-'}</td>
-      <td style="padding:8px;border-bottom:1px solid #eee"><strong>${p.numero || '-'}</strong></td>
+      <td style="padding:8px;border-bottom:1px solid #eee"><strong>${p.numero || '-'}/${p.ano || '-'}</strong></td>
       <td style="padding:8px;border-bottom:1px solid #eee">${p.autor || '-'}</td>
       <td style="padding:8px;border-bottom:1px solid #eee">${p.data || '-'}</td>
       <td style="padding:8px;border-bottom:1px solid #eee">${p.ementa || '-'}</td>
@@ -44,7 +44,7 @@ async function enviarEmail(novas) {
         <thead>
           <tr style="background:#1a3a5c;color:white">
             <th style="padding:10px;text-align:left">Tipo</th>
-            <th style="padding:10px;text-align:left">Número</th>
+            <th style="padding:10px;text-align:left">Número/Ano</th>
             <th style="padding:10px;text-align:left">Autor</th>
             <th style="padding:10px;text-align:left">Data</th>
             <th style="padding:10px;text-align:left">Ementa</th>
@@ -69,118 +69,49 @@ async function enviarEmail(novas) {
 }
 
 async function buscarProposicoes() {
-  const browser = await chromium.launch({
-    headless: true,
-    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-web-security']
+  const hoje = new Date();
+  const ano = hoje.getFullYear();
+
+  // Filtra proposições do ano atual, ordenadas por data de apresentação
+  const body = {
+    ano: ano,
+    pagina: 1,
+    itensPorPagina: 100,
+    ordenacao: 'dataApresentacao',
+    direcao: 'DESC'
+  };
+
+  console.log(`🔍 Buscando proposições de ${ano}...`);
+
+  const response = await fetch(`${API_BASE}/proposicao/filtrar`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
   });
 
-  const context = await browser.newContext({
-    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-    javaScriptEnabled: true,
-  });
-
-  const page = await context.newPage();
-  const proposicoes = [];
-
-  // Intercepta respostas da API
-  page.on('response', async (response) => {
-    const url = response.url();
-    if (url.includes('/proposicao') && url.includes('recaptcha')) {
-      try {
-        const json = await response.json();
-        const lista = Array.isArray(json) ? json :
-                      json.content ? json.content :
-                      json.data ? json.data : [];
-        if (lista.length > 0) {
-          proposicoes.push(...lista);
-          console.log(`📦 Capturadas ${lista.length} proposições via API`);
-        }
-      } catch (e) {}
-    }
-  });
-
-  try {
-    // Passo 1: carrega a página inicial
-    console.log('🌐 Carregando portal...');
-    await page.goto('https://consultas.assembleia.pr.leg.br/', {
-      waitUntil: 'domcontentloaded',
-      timeout: 60000
-    });
-    await page.waitForTimeout(8000);
-
-    // Passo 2: navega para proposição via hash (mantém Angular vivo)
-    console.log('🔀 Navegando para proposição via hash...');
-    await page.evaluate(() => {
-      window.location.hash = '/pesquisa-legislativa/proposicao';
-    });
-    await page.waitForTimeout(8000);
-
-    // Loga o conteúdo para debug
-    const bodyApos = await page.evaluate(() => document.body.innerText.substring(0, 400));
-    console.log('📄 Conteúdo após navegação:', bodyApos);
-
-    // Lista todos os botões
-    const botoes = await page.$$eval('button', els =>
-      els.map(b => ({ text: b.innerText.trim().substring(0, 40), cls: b.className.substring(0, 60) }))
-    );
-    console.log('🔎 Botões na página:', JSON.stringify(botoes));
-
-    // Passo 3: tenta múltiplos seletores para o botão pesquisar
-    console.log('🔍 Procurando botão Pesquisar...');
-    const seletores = ['button.btn-search', 'button[class*="search"]', 'button[class*="primary"]', 'button[type="button"]'];
-    let clicou = false;
-    for (const s of seletores) {
-      const el = await page.$(s);
-      if (el) {
-        const visivel = await el.isVisible();
-        if (visivel) {
-          await el.click();
-          console.log('✅ Clicou com seletor: ' + s);
-          clicou = true;
-          break;
-        }
-      }
-    }
-    if (!clicou) console.log('⚠️ Nenhum botão visível encontrado');
-
-    // Passo 4: aguarda resultados
-    console.log('⏳ Aguardando resultados...');
-    await page.waitForTimeout(20000);
-
-    // Fallback: extrai da tabela HTML
-    if (proposicoes.length === 0) {
-      console.log('🔎 Tentando extrair da tabela HTML...');
-      const linhasTabela = await page.$$eval('table tbody tr', rows =>
-        rows.map(row => {
-          const cols = Array.from(row.querySelectorAll('td'));
-          return {
-            tipo: cols[0]?.innerText?.trim() || '',
-            numero: cols[1]?.innerText?.trim() || '',
-            autor: cols[2]?.innerText?.trim() || '',
-            data: cols[3]?.innerText?.trim() || '',
-            ementa: cols[4]?.innerText?.trim() || '',
-          };
-        }).filter(r => r.numero)
-      );
-      proposicoes.push(...linhasTabela);
-      console.log(`📋 Extraídas ${linhasTabela.length} proposições da tabela HTML`);
-    }
-
-  } catch (e) {
-    console.error('Erro no scraping:', e.message);
-  } finally {
-    await browser.close();
+  if (!response.ok) {
+    console.error(`❌ Erro na API: ${response.status} ${response.statusText}`);
+    const texto = await response.text();
+    console.error('Resposta:', texto.substring(0, 300));
+    return [];
   }
 
-  return proposicoes;
+  const json = await response.json();
+  console.log('📦 Resposta da API (estrutura):', JSON.stringify(json).substring(0, 300));
+
+  const lista = Array.isArray(json) ? json :
+                json.content ? json.content :
+                json.data ? json.data :
+                json.lista ? json.lista :
+                json.proposicoes ? json.proposicoes : [];
+
+  console.log(`📊 ${lista.length} proposições recebidas`);
+  return lista;
 }
 
 function gerarId(p) {
-  return (
-    p.id ||
-    p.idProposicao ||
-    `${p.tipo || p.sigla || ''}-${p.numero || p.nro || ''}-${p.ano || ''}`.replace(/\s/g, '')
-  );
+  return p.id || p.codigo || p.idProposicao ||
+    `${p.sigla || p.tipo || ''}-${p.numero || ''}-${p.ano || ''}`.replace(/\s/g, '');
 }
 
 function normalizarProposicao(p) {
@@ -205,12 +136,12 @@ function normalizarProposicao(p) {
   const proposicoesRaw = await buscarProposicoes();
 
   if (proposicoesRaw.length === 0) {
-    console.log('⚠️ Nenhuma proposição encontrada. Verifique o script.');
+    console.log('⚠️ Nenhuma proposição encontrada.');
     process.exit(0);
   }
 
   const proposicoes = proposicoesRaw.map(normalizarProposicao).filter(p => p.id);
-  console.log(`📊 Total de proposições obtidas: ${proposicoes.length}`);
+  console.log(`📊 Total normalizado: ${proposicoes.length}`);
 
   const novas = proposicoes.filter(p => !idsVistos.has(p.id));
   console.log(`🆕 Proposições novas: ${novas.length}`);

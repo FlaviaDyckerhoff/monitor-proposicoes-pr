@@ -108,10 +108,13 @@ async function buscarProposicoes() {
     });
     await page.waitForTimeout(8000);
 
-    // Passo 2: clica no card "Proposição"
-    console.log('🖱️ Clicando no card Proposição...');
-    await page.click('a:has-text("Proposição")');
-    await page.waitForTimeout(5000);
+    // Passo 2: navega direto para a rota de proposição
+    console.log('🔀 Navegando para pesquisa de proposições...');
+    await page.goto('https://consultas.assembleia.pr.leg.br/#/pesquisa-legislativa/proposicao', {
+      waitUntil: 'domcontentloaded',
+      timeout: 30000
+    });
+    await page.waitForTimeout(8000);
 
     // Loga o que apareceu depois do clique
     const bodyApos = await page.evaluate(() => document.body.innerText.substring(0, 300));

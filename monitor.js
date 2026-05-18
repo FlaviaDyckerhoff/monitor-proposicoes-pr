@@ -6,6 +6,7 @@ const EMAIL_REMETENTE = process.env.EMAIL_REMETENTE;
 const EMAIL_SENHA = process.env.EMAIL_SENHA;
 const ARQUIVO_ESTADO = 'estado.json';
 const API_BASE = 'http://webservices.assembleia.pr.leg.br/api/public';
+const CONSULTA_BASE = `${API_BASE}/proposicao`;
 
 function carregarEstado() {
   if (fs.existsSync(ARQUIVO_ESTADO)) {
@@ -37,7 +38,7 @@ async function enviarEmail(novas) {
     const rows = porTipo[tipo].map(p =>
       `<tr>
         <td style="padding:8px;border-bottom:1px solid #eee;color:#555;font-size:12px">${p.tipo || '-'}</td>
-        <td style="padding:8px;border-bottom:1px solid #eee"><strong>${p.numero || '-'}/${p.ano || '-'}</strong></td>
+        <td style="padding:8px;border-bottom:1px solid #eee"><strong><a href="${p.url || 'https://consultas.assembleia.pr.leg.br/#/pesquisa-legislativa'}" style="color:#1a3a5c;text-decoration:none">${p.numero || '-'}/${p.ano || '-'}</a></strong></td>
         <td style="padding:8px;border-bottom:1px solid #eee;font-size:12px">${p.autor || '-'}</td>
         <td style="padding:8px;border-bottom:1px solid #eee;font-size:12px;white-space:nowrap">${p.data || '-'}</td>
         <td style="padding:8px;border-bottom:1px solid #eee;font-size:12px">${p.ementa || '-'}</td>
@@ -49,7 +50,7 @@ async function enviarEmail(novas) {
   const html = `
     <div style="font-family:Arial,sans-serif;max-width:900px;margin:0 auto">
       <h2 style="color:#1a3a5c;border-bottom:2px solid #1a3a5c;padding-bottom:8px">
-        🏛️ ALEP — ${novas.length} nova(s) proposição(ões)
+        🏛️ ALEPR — ${novas.length} nova(s) proposição(ões)
       </h2>
       <p style="color:#666">Monitoramento automático — ${new Date().toLocaleString('pt-BR')}</p>
       <table style="width:100%;border-collapse:collapse;font-size:14px">
@@ -71,9 +72,9 @@ async function enviarEmail(novas) {
   `;
 
   await transporter.sendMail({
-    from: `"Monitor ALEP" <${EMAIL_REMETENTE}>`,
+    from: `"Monitor ALEPR" <${EMAIL_REMETENTE}>`,
     to: EMAIL_DESTINO,
-    subject: `🏛️ ALEP: ${novas.length} nova(s) proposição(ões) — ${new Date().toLocaleDateString('pt-BR')}`,
+    subject: `🏛️ ALEPR: ${novas.length} nova(s) proposição(ões) — ${new Date().toLocaleDateString('pt-BR')}`,
     html,
   });
 
@@ -135,11 +136,12 @@ function normalizarProposicao(p) {
     autor: p.autor || p.nomeAutor || p.autores || '-',
     data: p.dataApresentacao || p.data || '-',
     ementa: (p.ementa || p.descricao || '-').substring(0, 200),
+    url: `${CONSULTA_BASE}/${gerarId(p)}`,
   };
 }
 
 (async () => {
-  console.log('🚀 Iniciando monitor ALEP...');
+  console.log('🚀 Iniciando monitor ALEPR...');
   console.log(`⏰ ${new Date().toLocaleString('pt-BR')}`);
 
   const estado = carregarEstado();

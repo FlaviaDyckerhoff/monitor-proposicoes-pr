@@ -1,4 +1,4 @@
-# 🏛️ Monitor Proposições PR — ALEP
+# 🏛️ Monitor Proposições PR — ALEPR
 
 Monitora automaticamente o portal da Assembleia Legislativa do Paraná e envia email quando há proposições novas.
 
@@ -56,7 +56,7 @@ Faça upload de todos os arquivos deste projeto para o repositório:
 ## 📧 Exemplo de email recebido
 
 ```
-Assunto: 🏛️ ALEP: 3 nova(s) proposição(ões) — 27/03/2026
+Assunto: 🏛️ ALEPR: 3 nova(s) proposição(ões) — 27/03/2026
 
 Tipo    | Número | Autor          | Data       | Ementa
 --------|--------|----------------|------------|---------------------------

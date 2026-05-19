@@ -2,8 +2,8 @@ name: Monitor Proposições PR
 
 on:
   schedule:
-    - cron: '0 11 * * *'   # 08:00 BRT
-    - cron: '0 19 * * *'   # 16:00 BRT
+    - cron: '30 11 * * *'   # 08:30 BRT
+    - cron: '30 19 * * *'   # 16:30 BRT
   workflow_dispatch:
 
 jobs:

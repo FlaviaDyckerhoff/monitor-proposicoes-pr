@@ -1,5 +1,8 @@
 name: Monitor Proposições PR
 
+env:
+  TZ: America/Sao_Paulo
+
 on:
   schedule:
     - cron: '30 11 * * *'   # 08:30 BRT

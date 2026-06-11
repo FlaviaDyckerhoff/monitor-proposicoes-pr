@@ -7,6 +7,9 @@ const EMAIL_SENHA = process.env.EMAIL_SENHA;
 const ARQUIVO_ESTADO = 'estado.json';
 const API_BASE = 'http://webservices.assembleia.pr.leg.br/api/public';
 const CONSULTA_BASE = `${API_BASE}/proposicao`;
+const MAX_TENTATIVAS_API = Number(process.env.MAX_TENTATIVAS_API || 3);
+const INTERVALO_RETRY_MS = Number(process.env.INTERVALO_RETRY_MS || 45000);
+const INTERVALO_ALERTA_FALHA_MS = Number(process.env.INTERVALO_ALERTA_FALHA_MS || 12 * 60 * 60 * 1000);
 
 function carregarEstado() {
   if (fs.existsSync(ARQUIVO_ESTADO)) {
@@ -17,6 +20,10 @@ function carregarEstado() {
 
 function salvarEstado(estado) {
   fs.writeFileSync(ARQUIVO_ESTADO, JSON.stringify(estado, null, 2));
+}
+
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 function prioridadeTipoEmail(tipo) {
@@ -133,7 +140,39 @@ async function enviarEmail(novas) {
   console.log(`✅ Email enviado com ${novas.length} proposições novas.`);
 }
 
-async function buscarProposicoes() {
+async function enviarEmailFalhaFonte(erro) {
+  if (!EMAIL_REMETENTE || !EMAIL_SENHA || !EMAIL_DESTINO) {
+    console.log('⚠️ Email de falha não enviado: credenciais de email ausentes.');
+    return false;
+  }
+
+  const transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: { user: EMAIL_REMETENTE, pass: EMAIL_SENHA },
+  });
+
+  const mensagem = String(erro && erro.message ? erro.message : erro).slice(0, 1200);
+
+  await transporter.sendMail({
+    from: `"Monitor Paraná" <${EMAIL_REMETENTE}>`,
+    to: EMAIL_DESTINO,
+    subject: `⚠️ ALEP/PR: fonte de proposições indisponível — ${new Date().toLocaleDateString('pt-BR')}`,
+    html: `
+      <div style="font-family:Arial,sans-serif;max-width:760px;margin:0 auto">
+        <h2 style="color:#9a3412">ALEP/PR — fonte de proposições indisponível</h2>
+        <p>O monitor tentou consultar a API pública da ALEP e a fonte continua fora.</p>
+        <p><strong>Erro:</strong></p>
+        <pre style="white-space:pre-wrap;background:#f7f7f7;padding:12px;border:1px solid #ddd">${mensagem}</pre>
+        <p style="font-size:12px;color:#666">Este alerta tem trava de repetição para evitar spam enquanto o backend da ALEP estiver instável.</p>
+      </div>
+    `,
+  });
+
+  console.log('⚠️ Email de falha enviado.');
+  return true;
+}
+
+async function buscarProposicoesApi() {
   const hoje = new Date();
   const ano = hoje.getFullYear();
 
@@ -178,6 +217,21 @@ async function buscarProposicoes() {
   return lista;
 }
 
+async function buscarProposicoes() {
+  let ultimoErro;
+  for (let tentativa = 1; tentativa <= MAX_TENTATIVAS_API; tentativa++) {
+    try {
+      if (tentativa > 1) console.log(`🔁 Retry API ALEP ${tentativa}/${MAX_TENTATIVAS_API}...`);
+      return await buscarProposicoesApi();
+    } catch (erro) {
+      ultimoErro = erro;
+      console.log(`⚠️ Falha na API ALEP tentativa ${tentativa}/${MAX_TENTATIVAS_API}: ${erro.message}`);
+      if (tentativa < MAX_TENTATIVAS_API) await sleep(INTERVALO_RETRY_MS);
+    }
+  }
+  throw ultimoErro;
+}
+
 function gerarId(p) {
   return p.id || p.codigo || p.idProposicao ||
     `${p.sigla || p.tipo || ''}-${p.numero || ''}-${p.ano || ''}`.replace(/\s/g, '');
@@ -203,7 +257,30 @@ function normalizarProposicao(p) {
   const estado = carregarEstado();
   const idsVistos = new Set(estado.proposicoes_vistas);
 
-  const proposicoesRaw = await buscarProposicoes();
+  let proposicoesRaw;
+  try {
+    proposicoesRaw = await buscarProposicoes();
+  } catch (erro) {
+    estado.ultima_execucao = new Date().toISOString();
+    estado.ultima_falha = {
+      data: new Date().toISOString(),
+      fonte: 'api-public-alep',
+      erro: String(erro && erro.message ? erro.message : erro).slice(0, 2000),
+    };
+
+    const ultimoAlertaMs = estado.ultimo_alerta_falha ? Date.parse(estado.ultimo_alerta_falha) : 0;
+    const deveAlertar = !ultimoAlertaMs || Date.now() - ultimoAlertaMs > INTERVALO_ALERTA_FALHA_MS;
+    if (deveAlertar) {
+      const alertaEnviado = await enviarEmailFalhaFonte(erro);
+      if (alertaEnviado) estado.ultimo_alerta_falha = new Date().toISOString();
+    } else {
+      console.log('⚠️ Fonte segue indisponível; alerta de falha já enviado recentemente.');
+    }
+
+    salvarEstado(estado);
+    process.exitCode = 2;
+    return;
+  }
 
   const proposicoes = proposicoesRaw.map(normalizarProposicao).filter(p => p.id);
   console.log(`📊 Total normalizado: ${proposicoes.length}`);

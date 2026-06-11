@@ -1904,5 +1904,10 @@
     129902,
     130037
   ],
-  "ultima_execucao": "2026-05-24T20:29:59.700Z"
+  "ultima_execucao": "2026-06-11T16:13:14.084Z",
+  "ultima_falha": {
+    "data": "2026-06-11T16:13:14.084Z",
+    "fonte": "api-public-alep",
+    "erro": "API ALEP indisponível: 500 Internal Server Error. Resposta: {\"type\":\"https://www.jhipster.tech/problem/problem-with-message\",\"title\":\"Internal Server Error\",\"status\":500,\"detail\":\"500 Server Error\",\"path\":\"/api/public/proposicao/filtrar\",\"message\":\"error.http.500\"}"
+  }
 }

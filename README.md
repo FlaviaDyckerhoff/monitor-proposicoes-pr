@@ -2,7 +2,7 @@
 
 Monitora automaticamente o portal da Assembleia Legislativa do Paraná e envia email quando há proposições novas.
 
-Roda **4x por dia** via GitHub Actions (8h, 12h, 17h, 21h BRT).
+Roda **1x por dia no VPS** (8h30 BRT, dias úteis). O GitHub Actions fica como execução manual de contingência.
 
 ---
 
@@ -68,13 +68,12 @@ REQ     | 456    | Dep. Ciclano   | 27/03/2026 | Requer informações...
 
 ## 🔧 Como funciona
 
-1. O GitHub Actions abre um browser Chrome real (headless)
-2. Acessa `consultas.assembleia.pr.leg.br`
-3. Preenche o formulário e clica em Pesquisar
-4. Intercepta a resposta da API de proposições
-5. Compara com o `estado.json` salvo no repositório
-6. Se há proposições novas → envia email
-7. Salva o estado atualizado no repositório
+1. O VPS executa `run_monitor_pr.sh` via cron.
+2. O script carrega as credenciais de email de `/root/.openclaw/workspace/agents/proposicoes/.env`.
+3. Consulta a API pública da ALEP com retry curto.
+4. Compara com o `estado.json`.
+5. Se há proposições novas → envia email.
+6. Se a fonte está fora → registra falha e envia alerta com trava de repetição.
 
 ---
 

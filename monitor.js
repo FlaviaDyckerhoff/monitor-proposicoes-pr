@@ -155,10 +155,11 @@ async function buscarProposicoes() {
   });
 
   if (!response.ok) {
-    console.error(`❌ Erro na API: ${response.status} ${response.statusText}`);
     const texto = await response.text();
-    console.error('Resposta:', texto.substring(0, 300));
-    return [];
+    throw new Error(
+      `API ALEP indisponível: ${response.status} ${response.statusText}. ` +
+      `Resposta: ${texto.substring(0, 300)}`
+    );
   }
 
   const json = await response.json();
@@ -171,6 +172,9 @@ async function buscarProposicoes() {
                 json.proposicoes ? json.proposicoes : [];
 
   console.log(`📊 ${lista.length} proposições recebidas`);
+  if (lista.length === 0) {
+    throw new Error('API ALEP retornou lista vazia para o ano corrente; tratando como falha para evitar verde falso.');
+  }
   return lista;
 }
 
@@ -200,11 +204,6 @@ function normalizarProposicao(p) {
   const idsVistos = new Set(estado.proposicoes_vistas);
 
   const proposicoesRaw = await buscarProposicoes();
-
-  if (proposicoesRaw.length === 0) {
-    console.log('⚠️ Nenhuma proposição encontrada.');
-    process.exit(0);
-  }
 
   const proposicoes = proposicoesRaw.map(normalizarProposicao).filter(p => p.id);
   console.log(`📊 Total normalizado: ${proposicoes.length}`);

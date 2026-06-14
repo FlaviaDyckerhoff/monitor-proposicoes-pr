@@ -226,10 +226,7 @@ async function buscarProposicoesApi() {
   // Filtra proposições do ano atual, ordenadas por data de apresentação
   const body = {
     ano: ano,
-    pagina: 1,
-    itensPorPagina: 100,
-    ordenacao: 'dataApresentacao',
-    direcao: 'DESC'
+    numeroMaximoRegistro: 100
   };
 
   console.log(`🔍 Buscando proposições de ${ano}...`);

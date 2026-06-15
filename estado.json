@@ -1902,13 +1902,34 @@
     130024,
     130025,
     129902,
-    130037
+    130037,
+    130228,
+    130208,
+    130333,
+    130262,
+    130187,
+    130105,
+    130152,
+    130090,
+    130089
   ],
-  "ultima_execucao": "2026-06-14T11:44:37.919Z",
+  "ultima_execucao": "2026-06-15T16:29:22.107Z",
   "ultima_falha": {
     "data": "2026-06-14T11:44:37.921Z",
     "fonte": "api-public-alep",
     "erro": "API ALEP indisponível: 500 Internal Server Error. Resposta: {\"type\":\"https://www.jhipster.tech/problem/problem-with-message\",\"title\":\"Internal Server Error\",\"status\":500,\"detail\":\"500 Server Error\",\"path\":\"/api/public/proposicao/filtrar\",\"message\":\"error.http.500\"}"
   },
-  "inicio_falha_api": "2026-06-11T00:00:00-03:00"
+  "inicio_falha_api": "2026-06-11T00:00:00-03:00",
+  "chaves_proposicoes_vistas": [
+    "EMENDADEPLENARIO-44-2026",
+    "PL-522-2026",
+    "REQUERIMENTO-1564-2026",
+    "REQUERIMENTO-1513-2026",
+    "REQUERIMENTO-1465-2026",
+    "REQUERIMENTO-1443-2026",
+    "REQUERIMENTO-1433-2026",
+    "REQUERIMENTO-1403-2026",
+    "REQUERIMENTO-1401-2026"
+  ],
+  "ultima_sucesso_api": "2026-06-15T16:29:22.107Z"
 }

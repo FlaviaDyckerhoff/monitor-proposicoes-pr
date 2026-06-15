@@ -80,6 +80,30 @@ function compararTiposEmail(a, b) {
   return String(a || '').localeCompare(String(b || ''), 'pt-BR');
 }
 
+function numeroInteiro(valor) {
+  const n = parseInt(String(valor || '').replace(/\D/g, ''), 10);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function formatarDataAlepr(valor) {
+  if (!valor) return '-';
+  const data = new Date(String(valor));
+  if (Number.isNaN(data.getTime())) return String(valor);
+  return data.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+}
+
+function compararProposicoesEmail(a, b) {
+  const tipo = compararTiposEmail(a.tipo, b.tipo);
+  if (tipo !== 0) return tipo;
+  const anoA = numeroInteiro(a.ano);
+  const anoB = numeroInteiro(b.ano);
+  if (anoA !== anoB) return anoA - anoB;
+  const numeroA = numeroInteiro(a.numero);
+  const numeroB = numeroInteiro(b.numero);
+  if (numeroA !== numeroB) return numeroA - numeroB;
+  return String(a.autor || '').localeCompare(String(b.autor || ''), 'pt-BR');
+}
+
 
 const CLIENTES_NOMES_PROPRIOS = [
   'FIRJAN', 'Red Bull', 'Sindicerv', 'Boticario', 'Boticário', 'Abrasel', 'ANBRASEL',
@@ -134,8 +158,9 @@ async function enviarEmail(novas) {
   });
 
   const linhas = Object.keys(porTipo).sort(compararTiposEmail).map(tipo => {
+    const itens = [...porTipo[tipo]].sort(compararProposicoesEmail);
     const header = `<tr><td colspan="5" style="padding:10px 8px 4px;background:#f0f4f8;font-weight:bold;color:#1a3a5c;font-size:13px;border-top:2px solid #1a3a5c">${tipo} — ${porTipo[tipo].length} proposição(ões)</td></tr>`;
-    const rows = porTipo[tipo].map(p =>
+    const rows = itens.map(p =>
       `<tr>
         <td style="padding:8px;border-bottom:1px solid #eee;color:#555;font-size:12px">${escaparHtml(p.tipo || '-')}</td>
         <td style="padding:8px;border-bottom:1px solid #eee"><strong><a href="${escaparHtml(p.url || 'https://consultas.assembleia.pr.leg.br/#/pesquisa-legislativa')}" style="color:#1a3a5c;text-decoration:none">${escaparHtml(p.numero || '-')}/${escaparHtml(p.ano || '-')}</a></strong></td>
@@ -167,7 +192,7 @@ async function enviarEmail(novas) {
         <tbody>${linhas}</tbody>
       </table>
       <p style="margin-top:20px;font-size:12px;color:#999">
-        Acesse: <a href="https://consultas.assembleia.pr.leg.br/#/pesquisa-legislativa">consultas.assembleia.pr.leg.br</a>
+        Os números/anos acima estão hyperlinkados para a fonte oficial da ALEP.
       </p>
     </div>
   `;
@@ -461,7 +486,7 @@ function normalizarProposicao(p) {
     numero: p.numero || p.nro || '-',
     ano: p.ano || '-',
     autor: p.autor || p.nomeAutor || p.autores || '-',
-    data: p.dataApresentacao || p.data || '-',
+    data: formatarDataAlepr(p.dataApresentacao || p.dataRecebimento || p.dataEntrada || p.data),
     ementa: (p.ementa || p.descricao || '-'),
     url: `${CONSULTA_BASE}/${gerarId(p)}`,
   };
@@ -536,12 +561,7 @@ function normalizarProposicao(p) {
   console.log(`🆕 Proposições novas: ${novas.length}`);
 
   if (novas.length > 0) {
-    // Ordena por tipo alfabético, depois por número decrescente dentro de cada tipo
-    novas.sort((a, b) => {
-      if (a.tipo < b.tipo) return -1;
-      if (a.tipo > b.tipo) return 1;
-      return (parseInt(b.numero) || 0) - (parseInt(a.numero) || 0);
-    });
+    novas.sort(compararProposicoesEmail);
     await enviarEmail(novas);
     novas.forEach(p => idsVistos.add(p.id));
     novas.map(chaveProposicao).filter(Boolean).forEach(chave => chavesVistas.add(chave));

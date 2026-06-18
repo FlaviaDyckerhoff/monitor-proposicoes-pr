@@ -135,12 +135,54 @@ function anotarClientesCitados(proposicoes) {
   }
 }
 
+function mlEscapeHtmlClienteDestaque(valor) {
+  return String(valor ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/\"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function mlEscapeRegExpClienteDestaque(valor) {
+  return String(valor).replace(/[.*+?^\${}()|[\]\\]/g, '\\$&');
+}
+
+function mlDestacarTermosClienteEmail(texto, clientes) {
+  const nomes = Array.from(new Set([...(clientes || []), ...CLIENTES_NOMES_PROPRIOS]))
+    .filter(Boolean)
+    .sort((a, b) => b.length - a.length);
+  if (!nomes.length) return mlEscapeHtmlClienteDestaque(texto);
+
+  const regex = new RegExp('(^|[^A-Za-zÀ-ÿ0-9])(' + nomes.map(mlEscapeRegExpClienteDestaque).join('|') + ')(?=[^A-Za-zÀ-ÿ0-9]|$)', 'gi');
+  return mlEscapeHtmlClienteDestaque(texto).replace(regex, (match, prefixo, termo) => {
+    return prefixo + '<span style="background:#dbeafe;color:#1e3a8a;font-weight:700;border-radius:3px;padding:1px 3px">' + termo + '</span>';
+  });
+}
+
+function renderizarEmentaCliente(p, renderBase) {
+  const texto = String((p && p.ementa) || '-');
+  const partes = texto.split(/\s+\|\s+Cliente citado:\s+/i);
+  const ementa = renderBase
+    ? renderBase(partes[0])
+    : mlDestacarTermosClienteEmail(partes[0], p && p.clientesCitados);
+  const clientes = partes.length > 1
+    ? partes.slice(1).join(' | Cliente citado: ')
+    : ((p && p.clientesCitados) || []).join(', ');
+
+  if (!clientes) return ementa;
+  return ementa + '<div style="margin-top:6px">' +
+    '<span style="display:inline-block;background:#eef6ff;border:1px solid #bfdbfe;color:#1e3a8a;border-radius:999px;padding:3px 8px;font-size:11px;font-weight:700">' +
+    'Cliente citado: ' + mlDestacarTermosClienteEmail(clientes, p && p.clientesCitados) +
+    '</span></div>';
+}
+
 async function enviarEmail(novas) {
   anotarClientesCitados(novas);
   const temFallback = novas.some(p => p.fonte === 'fallback-noticias-alep');
   if (DRY_RUN) {
     console.log(`🧪 DRY_RUN=1 — email não enviado. Itens que seriam enviados: ${novas.length}`);
-    novas.forEach(p => console.log(`  - ${p.tipo || '-'} ${p.numero || '-'}/${p.ano || '-'} | ${p.ementa || '-'} | ${p.url || '-'}`));
+    novas.forEach(p => console.log(`  - ${p.tipo || '-'} ${p.numero || '-'}/${p.ano || '-'} | ${renderizarEmentaCliente(p)} | ${p.url || '-'}`));
     return;
   }
 
@@ -166,7 +208,7 @@ async function enviarEmail(novas) {
         <td style="padding:8px;border-bottom:1px solid #eee"><strong><a href="${escaparHtml(p.url || 'https://consultas.assembleia.pr.leg.br/#/pesquisa-legislativa')}" style="color:#1a3a5c;text-decoration:none">${escaparHtml(p.numero || '-')}/${escaparHtml(p.ano || '-')}</a></strong></td>
         <td style="padding:8px;border-bottom:1px solid #eee;font-size:12px">${escaparHtml(p.autor || '-')}</td>
         <td style="padding:8px;border-bottom:1px solid #eee;font-size:12px;white-space:nowrap">${escaparHtml(p.data || '-')}</td>
-        <td style="padding:8px;border-bottom:1px solid #eee;font-size:12px">${escaparHtml(p.ementa || '-')}${p.fonte === 'fallback-noticias-alep' ? '<br><span style="color:#9a3412;font-size:11px">Fonte alternativa: notícia oficial ALEP enquanto API pública está indisponível.</span>' : ''}</td>
+        <td style="padding:8px;border-bottom:1px solid #eee;font-size:12px">${renderizarEmentaCliente(p)}${p.fonte === 'fallback-noticias-alep' ? '<br><span style="color:#9a3412;font-size:11px">Fonte alternativa: notícia oficial ALEP enquanto API pública está indisponível.</span>' : ''}</td>
       </tr>`
     ).join('');
     return header + rows;

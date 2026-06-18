@@ -1913,7 +1913,7 @@
     130090,
     130089
   ],
-  "ultima_execucao": "2026-06-17T12:39:00.524Z",
+  "ultima_execucao": "2026-06-18T12:04:51.617Z",
   "ultima_falha": {
     "data": "2026-06-14T11:44:37.921Z",
     "fonte": "api-public-alep",
@@ -1931,5 +1931,5 @@
     "REQUERIMENTO-1403-2026",
     "REQUERIMENTO-1401-2026"
   ],
-  "ultima_sucesso_api": "2026-06-17T12:39:00.524Z"
+  "ultima_sucesso_api": "2026-06-18T12:04:51.617Z"
 }

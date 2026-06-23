@@ -4,9 +4,27 @@ env:
   TZ: America/Sao_Paulo
 
 on:
-  schedule:
-    - cron: '42 8 * * 1-5'   # 05:42 BRT
   workflow_dispatch:
+    inputs:
+      api_data_inicial:
+        description: 'Data inicial da janela ALEP (YYYY-MM-DD)'
+        required: false
+      api_data_final:
+        description: 'Data final da janela ALEP (YYYY-MM-DD)'
+        required: false
+      tipos_incluir:
+        description: 'Tipos para enviar, separados por virgula'
+        required: false
+      enviar_apenas_desde:
+        description: 'Enviar apenas itens a partir desta data (YYYY-MM-DD)'
+        required: false
+      marcar_excluidos_como_vistos:
+        description: 'Marcar itens fora do recorte como vistos sem email'
+        required: false
+        default: '0'
+      email_assunto_prefixo:
+        description: 'Prefixo opcional do assunto'
+        required: false
 
 jobs:
   monitorar:
@@ -33,6 +51,12 @@ jobs:
           EMAIL_REMETENTE: ${{ secrets.EMAIL_REMETENTE }}
           EMAIL_SENHA: ${{ secrets.EMAIL_SENHA }}
           EMAIL_DESTINO: ${{ secrets.EMAIL_DESTINO }}
+          API_DATA_INICIAL: ${{ github.event.inputs.api_data_inicial }}
+          API_DATA_FINAL: ${{ github.event.inputs.api_data_final }}
+          TIPOS_INCLUIR: ${{ github.event.inputs.tipos_incluir }}
+          ENVIAR_APENAS_DESDE: ${{ github.event.inputs.enviar_apenas_desde }}
+          MARCAR_EXCLUIDOS_COMO_VISTOS: ${{ github.event.inputs.marcar_excluidos_como_vistos }}
+          EMAIL_ASSUNTO_PREFIXO: ${{ github.event.inputs.email_assunto_prefixo }}
         run: node monitor.js
 
       - name: Salvar estado atualizado no repositório

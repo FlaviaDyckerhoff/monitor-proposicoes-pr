@@ -13,6 +13,14 @@ const INTERVALO_RETRY_MS = Number(process.env.INTERVALO_RETRY_MS || 45000);
 const INTERVALO_ALERTA_FALHA_MS = Number(process.env.INTERVALO_ALERTA_FALHA_MS || 12 * 60 * 60 * 1000);
 const FALLBACK_NOTICIAS_DIAS = Number(process.env.FALLBACK_NOTICIAS_DIAS || 14);
 const FALLBACK_MAX_ARTIGOS = Number(process.env.FALLBACK_MAX_ARTIGOS || 30);
+const API_JANELA_DIAS = Number(process.env.API_JANELA_DIAS || 21);
+const API_NUMERO_MAXIMO_REGISTRO = Number(process.env.API_NUMERO_MAXIMO_REGISTRO || 500);
+const API_DATA_INICIAL = process.env.API_DATA_INICIAL || '';
+const API_DATA_FINAL = process.env.API_DATA_FINAL || '';
+const TIPOS_INCLUIR = process.env.TIPOS_INCLUIR || '';
+const ENVIAR_APENAS_DESDE = process.env.ENVIAR_APENAS_DESDE || '';
+const MARCAR_EXCLUIDOS_COMO_VISTOS = process.env.MARCAR_EXCLUIDOS_COMO_VISTOS === '1';
+const EMAIL_ASSUNTO_PREFIXO = process.env.EMAIL_ASSUNTO_PREFIXO || '';
 const DRY_RUN = process.env.DRY_RUN === '1';
 
 function carregarEstado() {
@@ -47,13 +55,60 @@ function normalizarTexto(valor) {
     .trim();
 }
 
-function chaveProposicao(p) {
-  const tipo = normalizarTexto(p.sigla || p.tipo || p.tipoProposicao || '')
+function dataLocalIso(data = new Date()) {
+  const partes = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(data);
+  const mapa = Object.fromEntries(partes.map(p => [p.type, p.value]));
+  return `${mapa.year}-${mapa.month}-${mapa.day}`;
+}
+
+function subtrairDiasLocal(data = new Date(), dias = 0) {
+  const d = new Date(data.getTime());
+  d.setUTCDate(d.getUTCDate() - dias);
+  return dataLocalIso(d);
+}
+
+function tipoCanonico(valor) {
+  return normalizarTexto(valor)
     .toUpperCase()
+    .replace(/^PRO$/, 'PL')
+    .replace(/^PLO$/, 'PL')
     .replace(/^PROJETO DE LEI ORDINARIA$/, 'PL')
     .replace(/^PROJETO DE LEI$/, 'PL')
     .replace(/^PROJETO DE LEI COMPLEMENTAR$/, 'PLC')
+    .replace(/^EMENDA DE PLENARIO$/, 'EPL')
+    .replace(/^PROPOSTA DE EMENDA A CONSTITUICAO$/, 'PEC')
+    .replace(/^PROJETO DECRETO LEGISLATIVO$/, 'PDL')
+    .replace(/^PROJETO DE RESOLUCAO$/, 'PR')
+    .replace(/^REQUERIMENTO$/, 'REQ')
     .replace(/[^A-Z0-9]/g, '');
+}
+
+function tiposIncluidosSet() {
+  if (!TIPOS_INCLUIR.trim()) return null;
+  return new Set(
+    TIPOS_INCLUIR.split(',')
+      .map(tipoCanonico)
+      .filter(Boolean)
+  );
+}
+
+function dataIsoProposicao(p) {
+  const valor = p && (p.dataIso || p.dataApresentacao || p.dataRecebimento || p.dataEntrada || p.data);
+  if (!valor) return '';
+  if (/^\d{4}-\d{2}-\d{2}/.test(String(valor))) return String(valor).slice(0, 10);
+  const partes = String(valor).match(/^(\d{2})\/(\d{2})\/(20\d{2})$/);
+  if (partes) return `${partes[3]}-${partes[2]}-${partes[1]}`;
+  const data = new Date(String(valor));
+  return Number.isNaN(data.getTime()) ? '' : dataLocalIso(data);
+}
+
+function chaveProposicao(p) {
+  const tipo = tipoCanonico(p.sigla || p.tipo || p.tipoProposicao || '');
   const numero = String(p.numero || p.nro || '').replace(/\D/g, '');
   const ano = String(p.ano || '').replace(/\D/g, '');
   if (!tipo || !numero || !ano) return null;
@@ -273,7 +328,7 @@ async function enviarEmail(novas) {
   await transporter.sendMail({
     from: `"Monitor Paraná" <${EMAIL_REMETENTE}>`,
     to: EMAIL_DESTINO,
-    subject: `${temFallback ? '⚠️ ' : '🏛️ '}Paraná: ${novas.length} nova(s) proposição(ões)${temFallback ? ' via fallback' : ''} — ${new Date().toLocaleDateString('pt-BR')}`,
+    subject: `${EMAIL_ASSUNTO_PREFIXO}${temFallback ? '⚠️ ' : '🏛️ '}Paraná: ${novas.length} nova(s) proposição(ões)${temFallback ? ' via fallback' : ''} — ${new Date().toLocaleDateString('pt-BR')}`,
     html,
   });
 
@@ -320,14 +375,17 @@ async function enviarEmailFalhaFonte(erro) {
 async function buscarProposicoesApi() {
   const hoje = new Date();
   const ano = hoje.getFullYear();
+  const dataFinal = API_DATA_FINAL || dataLocalIso(hoje);
+  const dataInicial = API_DATA_INICIAL || subtrairDiasLocal(hoje, API_JANELA_DIAS);
 
-  // Filtra proposições do ano atual, ordenadas por data de apresentação
   const body = {
     ano: ano,
-    numeroMaximoRegistro: 100
+    numeroMaximoRegistro: API_NUMERO_MAXIMO_REGISTRO,
+    dataInicial,
+    dataFinal,
   };
 
-  console.log(`🔍 Buscando proposições de ${ano}...`);
+  console.log(`🔍 Buscando proposições de ${ano}, janela ${dataInicial} a ${dataFinal}...`);
 
   const response = await fetch(`${API_BASE}/proposicao/filtrar`, {
     method: 'POST',
@@ -553,13 +611,15 @@ function gerarId(p) {
 }
 
 function normalizarProposicao(p) {
+  const dataBruta = p.dataApresentacao || p.dataRecebimento || p.dataEntrada || p.data;
   const normalizada = {
     id: gerarId(p),
     tipo: p.sigla || p.tipo || p.tipoProposicao || '-',
     numero: p.numero || p.nro || '-',
     ano: p.ano || '-',
     autor: p.autor || p.nomeAutor || p.autores || '-',
-    data: formatarDataAlepr(p.dataApresentacao || p.dataRecebimento || p.dataEntrada || p.data),
+    data: formatarDataAlepr(dataBruta),
+    dataIso: dataIsoProposicao({ data: dataBruta }),
     ementa: (p.ementa || p.descricao || '-'),
     url: `${CONSULTA_BASE}/${gerarId(p)}`,
   };
@@ -630,14 +690,29 @@ function normalizarProposicao(p) {
   console.log(`📊 Total normalizado: ${proposicoes.length}`);
   console.log(`📡 Fonte usada: ${fonteUsada}`);
 
-  const novas = proposicoes.filter(p => !idsVistos.has(p.id) && (!p.chave || !chavesVistas.has(p.chave)));
+  const tiposPermitidos = tiposIncluidosSet();
+  const novasBrutas = proposicoes.filter(p => !idsVistos.has(p.id) && (!p.chave || !chavesVistas.has(p.chave)));
+  const novas = [];
+  const marcadasSemEmail = [];
+  for (const p of novasBrutas) {
+    const tipoOk = !tiposPermitidos || tiposPermitidos.has(tipoCanonico(p.tipo || p.sigla || p.tipoProposicao || ''));
+    const dataOk = !ENVIAR_APENAS_DESDE || dataIsoProposicao(p) >= ENVIAR_APENAS_DESDE;
+    if (tipoOk && dataOk) {
+      novas.push(p);
+    } else if (MARCAR_EXCLUIDOS_COMO_VISTOS) {
+      marcadasSemEmail.push(p);
+    }
+  }
   console.log(`🆕 Proposições novas: ${novas.length}`);
+  if (marcadasSemEmail.length > 0) {
+    console.log(`🔇 Marcando sem email: ${marcadasSemEmail.length} proposição(ões) fora do recorte de envio.`);
+  }
 
   if (novas.length > 0) {
     novas.sort(compararProposicoesEmail);
     await enviarEmail(novas);
-    novas.forEach(p => idsVistos.add(p.id));
-    novas.map(chaveProposicao).filter(Boolean).forEach(chave => chavesVistas.add(chave));
+    [...novas, ...marcadasSemEmail].forEach(p => idsVistos.add(p.id));
+    [...novas, ...marcadasSemEmail].map(chaveProposicao).filter(Boolean).forEach(chave => chavesVistas.add(chave));
     estado.proposicoes_vistas = Array.from(idsVistos);
     estado.chaves_proposicoes_vistas = Array.from(chavesVistas);
     estado.ultima_execucao = new Date().toISOString();
@@ -645,6 +720,10 @@ function normalizarProposicao(p) {
     if (!DRY_RUN) salvarEstado(estado);
   } else {
     console.log('✅ Sem novidades. Nada a enviar.');
+    marcadasSemEmail.forEach(p => idsVistos.add(p.id));
+    marcadasSemEmail.map(chaveProposicao).filter(Boolean).forEach(chave => chavesVistas.add(chave));
+    estado.proposicoes_vistas = Array.from(idsVistos);
+    estado.chaves_proposicoes_vistas = Array.from(chavesVistas);
     estado.ultima_execucao = new Date().toISOString();
     if (fonteUsada === 'api-public-alep') estado.ultima_sucesso_api = estado.ultima_execucao;
     if (!DRY_RUN) salvarEstado(estado);

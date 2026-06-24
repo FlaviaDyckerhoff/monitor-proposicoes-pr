@@ -306,6 +306,9 @@ async function enviarEmail(novas) {
         🏛️ Assembleia Legislativa do Paraná — ${novas.length} nova(s) proposição(ões)
       </h2>
       <p style="color:#666">Monitoramento automático — ${new Date().toLocaleString('pt-BR')}</p>
+      <p style="background:#f8fafc;border:1px solid #cbd5e1;color:#334155;padding:10px;border-radius:4px;font-size:13px">
+        <strong>Nota operacional:</strong> conferir a fonte oficial da ALEP para confirmar se os itens enviados estão alinhados ao site público, pois a API aberta pode apresentar defasagem temporária.
+      </p>
       ${temFallback ? '<p style="background:#fff7ed;border:1px solid #fed7aa;color:#9a3412;padding:10px;border-radius:4px"><strong>Atenção:</strong> a API pública da ALEP está indisponível. Estes itens vieram do fallback por notícias oficiais e devem ser conferidos quando a API voltar.</p>' : ''}
       <table style="width:100%;border-collapse:collapse;font-size:14px">
         <thead>

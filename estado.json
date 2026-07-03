@@ -2344,7 +2344,7 @@
     130702,
     130703
   ],
-  "ultima_execucao": "2026-07-03T08:35:20.674Z",
+  "ultima_execucao": "2026-07-03T20:00:17.348Z",
   "ultima_falha": {
     "data": "2026-06-14T11:44:37.921Z",
     "fonte": "api-public-alep",
@@ -2793,5 +2793,5 @@
     "REQ-1794-2026",
     "REQ-1795-2026"
   ],
-  "ultima_sucesso_api": "2026-07-03T08:35:20.674Z"
+  "ultima_sucesso_api": "2026-07-03T20:00:17.348Z"
 }

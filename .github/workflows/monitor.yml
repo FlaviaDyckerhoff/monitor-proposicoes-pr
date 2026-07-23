@@ -51,6 +51,9 @@ jobs:
           EMAIL_REMETENTE: ${{ secrets.EMAIL_REMETENTE }}
           EMAIL_SENHA: ${{ secrets.EMAIL_SENHA }}
           EMAIL_DESTINO: ${{ secrets.EMAIL_DESTINO }}
+          CONTROLE03_API_USER: ${{ secrets.CONTROLE03_API_USER }}
+          CONTROLE03_API_PASS: ${{ secrets.CONTROLE03_API_PASS }}
+          CONTROLE03_STATE_URL: ${{ secrets.CONTROLE03_STATE_URL }}
           API_DATA_INICIAL: ${{ github.event.inputs.api_data_inicial }}
           API_DATA_FINAL: ${{ github.event.inputs.api_data_final }}
           TIPOS_INCLUIR: ${{ github.event.inputs.tipos_incluir }}

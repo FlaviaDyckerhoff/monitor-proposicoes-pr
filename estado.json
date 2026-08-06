@@ -2425,9 +2425,9 @@
     "fallback-noticia-PL-95-2026",
     "fallback-noticia-PL-212-2026"
   ],
-  "ultima_execucao": "2026-08-05T20:01:56.230Z",
+  "ultima_execucao": "2026-08-06T08:37:07.004Z",
   "ultima_falha": {
-    "data": "2026-08-05T20:01:49.294Z",
+    "data": "2026-08-06T08:36:59.364Z",
     "fonte": "api-public-alep",
     "erro": "API ALEP retornou lista vazia para o ano corrente; tratando como falha para evitar verde falso."
   },
@@ -2957,7 +2957,7 @@
   ],
   "ultima_sucesso_api": "2026-07-31T20:00:18.392Z",
   "ultimo_fallback": {
-    "data": "2026-08-05T20:01:56.229Z",
+    "data": "2026-08-06T08:37:07.003Z",
     "fonte": "fallback-noticias-alep",
     "total_extraido": 8
   }

@@ -1,5 +1,34 @@
+const FICHA_URL = process.env.FICHA_URL || 'https://doe.monitorlegislativo.com.br/ficha';
+
+function fichaEmailButtonHtml() {
+  return '<div style="background:#eef6ff;border:1px solid #c7ddf2;border-radius:6px;padding:11px 13px;margin:12px 0;color:#173d63;font-size:13px;line-height:1.45">' +
+    '<strong>Ficha</strong><br>' +
+    '<span>Cole o link oficial de uma proposição para criar ficha e acelerar a revisão/cadastro.</span><br>' +
+    '<a href="' + FICHA_URL + '" style="display:inline-block;background:#0f3d5c;color:white;text-decoration:none;border-radius:4px;padding:8px 11px;font-weight:bold;margin-top:8px">Criar ficha</a>' +
+    '</div>';
+}
+
 const fs = require('fs');
 const nodemailer = require('nodemailer');
+let promoverInteresseClienteProposicao = (_item, atuais) => Array.isArray(atuais) ? atuais : [];
+try {
+  try {
+    ({ promoverInteresseClienteProposicao } = require('./client_interest_matcher_js'));
+  } catch (_localErr) {
+    ({ promoverInteresseClienteProposicao } = require('../../agents/pautas/client_interest_matcher_js'));
+  }
+} catch (err) {
+  console.warn('⚠️ Matcher cliente/palavra comum indisponível; usando destaque legado: ' + err.message);
+}
+
+function mlClientInterestContext() {
+  return {
+    uf: typeof CLIENT_INTEREST_UF !== 'undefined' ? CLIENT_INTEREST_UF : (process.env.CLIENT_INTEREST_UF || process.env.UF || ''),
+    municipio: typeof CLIENT_INTEREST_MUNICIPIO !== 'undefined' ? CLIENT_INTEREST_MUNICIPIO : (process.env.CLIENT_INTEREST_MUNICIPIO || process.env.MUNICIPIO || ''),
+    casa: typeof CASA_RADAR03 !== 'undefined' ? CASA_RADAR03 : (process.env.CASA_RADAR03 || process.env.CASA || ''),
+  };
+}
+
 
 const EMAIL_DESTINO = process.env.EMAIL_DESTINO;
 const EMAIL_REMETENTE = process.env.EMAIL_REMETENTE;
@@ -21,6 +50,7 @@ const INTERVALO_RETRY_MS = Number(process.env.INTERVALO_RETRY_MS || 45000);
 const INTERVALO_ALERTA_FALHA_MS = Number(process.env.INTERVALO_ALERTA_FALHA_MS || 12 * 60 * 60 * 1000);
 const FALLBACK_NOTICIAS_DIAS = Number(process.env.FALLBACK_NOTICIAS_DIAS || 14);
 const FALLBACK_MAX_ARTIGOS = Number(process.env.FALLBACK_MAX_ARTIGOS || 30);
+const FALLBACK_FETCH_TIMEOUT_MS = Number(process.env.FALLBACK_FETCH_TIMEOUT_MS || 12000);
 const API_JANELA_DIAS = Number(process.env.API_JANELA_DIAS || 21);
 const API_NUMERO_MAXIMO_REGISTRO = Number(process.env.API_NUMERO_MAXIMO_REGISTRO || 500);
 const API_DATA_INICIAL = process.env.API_DATA_INICIAL || '';
@@ -30,7 +60,7 @@ const ENVIAR_APENAS_DESDE = process.env.ENVIAR_APENAS_DESDE || '';
 const MARCAR_EXCLUIDOS_COMO_VISTOS = process.env.MARCAR_EXCLUIDOS_COMO_VISTOS === '1';
 const EMAIL_ASSUNTO_PREFIXO = process.env.EMAIL_ASSUNTO_PREFIXO || '';
 const DRY_RUN = process.env.DRY_RUN === '1';
-
+const FALLBACK_NOTICIAS_ENVIA_EMAIL = process.env.FALLBACK_NOTICIAS_ENVIA_EMAIL === '1';
 function carregarEstado() {
   if (fs.existsSync(ARQUIVO_ESTADO)) {
     return JSON.parse(fs.readFileSync(ARQUIVO_ESTADO, 'utf8'));
@@ -203,7 +233,7 @@ const CLIENTES_NOMES_PROPRIOS = [
   'Wild Fork', 'Ajinomoto', 'Vibra', 'Vibra Energia',
   'BR Distribuidora', 'Raízen', 'Raizen', 'Mindlab',
   'ABVTEX', 'Semove', 'Barcas', 'Seta',
-  'Nova Infra', 'BRT'
+  'Nova Infra'
 ];
 
 const CLIENTES_INATIVOS_NAO_DESTACAR = [
@@ -229,7 +259,7 @@ function clientesCitadosNaProposicao(p) {
     const re = new RegExp('(^|[^A-Za-zÀ-ÿ0-9])' + escaped + '([^A-Za-zÀ-ÿ0-9]|$)', 'i');
     if (re.test(texto) && !achados.some(a => a.toLowerCase() === nome.toLowerCase())) achados.push(nome);
   }
-  return achados;
+  return promoverInteresseClienteProposicao(p, achados, mlClientInterestContext());
 }
 
 function anotarClientesCitados(proposicoes) {
@@ -624,7 +654,7 @@ async function enviarEmail(novas) {
     from: `"Monitor Paraná" <${EMAIL_REMETENTE}>`,
     to: EMAIL_DESTINO,
     subject: assuntoEmailClienteCitado(novas, `${EMAIL_ASSUNTO_PREFIXO}${temFallback ? '⚠️ ' : '🏛️ '}Paraná: ${novas.length} nova(s) proposição(ões)${temFallback ? ' via fallback' : ''} — ${new Date().toLocaleDateString('pt-BR')}`),
-    html,
+    html: fichaEmailButtonHtml() + html,
   });
 
   console.log(`✅ Email enviado com ${novas.length} proposições novas.`);
@@ -657,10 +687,11 @@ async function enviarEmailFalhaFonte(erro) {
     from: `"Monitor Paraná" <${EMAIL_REMETENTE}>`,
     to: EMAIL_DESTINO,
     subject: `⚠️ ALEP/PR: fonte de proposições indisponível — ${new Date().toLocaleDateString('pt-BR')}`,
-    html: `
+    html: fichaEmailButtonHtml() + `
       <div style="font-family:Arial,sans-serif;max-width:760px;margin:0 auto">
         <h2 style="color:#9a3412">ALEP/PR — fonte de proposições indisponível</h2>
         <p>O monitor tentou consultar a API pública da ALEP e a fonte continua fora.</p>
+        <p><strong>Regra atual:</strong> notícias oficiais da ALEP ficam apenas como auditoria/log e não serão enviadas como proposições novas, porque misturam sanção, pauta, aprovação e tramitação antiga.</p>
         <p><strong>Erro:</strong></p>
         <pre style="white-space:pre-wrap;background:#f7f7f7;padding:12px;border:1px solid #ddd">${mensagem}</pre>
         <p style="font-size:12px;color:#666">Este alerta tem trava de repetição para evitar spam enquanto o backend da ALEP estiver instável.</p>
@@ -792,13 +823,16 @@ function extrairAutor(texto) {
 
 function ehContextoDeProposicaoNova(titulo, texto, indice) {
   const tituloNormalizado = normalizarTexto(titulo).toLowerCase();
-  const contexto = normalizarTexto(texto.slice(Math.max(0, indice - 220), indice + 260)).toLowerCase();
-  if (/\b(aprovad[ao]|sancionad[ao]|promulgad[ao]|pauta|ordem do dia|homenageia|audiencia publica)\b/i.test(contexto) &&
-      !/\b(tramita|apresentad[ao]|protocola|protocolad[ao]|deu entrada|preve|quer|visa|institui)\b/i.test(contexto)) {
+  const textoNormalizado = normalizarTexto(texto).toLowerCase();
+  const contexto = normalizarTexto(texto.slice(Math.max(0, indice - 260), indice + 320)).toLowerCase();
+  const sentenca = contexto.split(/[.!?;]\s+/).find(parte => /\b(?:projeto de lei|pl)\b/.test(parte)) || contexto;
+
+  if (/\b(sancao|sancionad[ao]|redacao final|aprovad[ao]s?|apreciad[ao]s?|parecer favoravel|pauta|ordem do dia|sessao plenaria|comissao .*aprova|promulgad[ao])\b/i.test(tituloNormalizado + ' ' + sentenca)) {
     return false;
   }
-  return /projeto/.test(tituloNormalizado) &&
-    /\b(tramita|apresentad[ao]|protocola|protocolad[ao]|deu entrada|preve|quer|visa|institui)\b/i.test(contexto);
+
+  return /\b(projeto|proposicao)\b/.test(tituloNormalizado + ' ' + textoNormalizado) &&
+    /\b(passou a tramitar|comecou a tramitar|começa a tramitar|comeca a tramitar|tramita na assembleia|foi protocolad[ao]|protocolad[ao]|protocolou|apresentou\s+(?:o\s+)?projeto|apresentad[ao]\s+(?:o\s+)?projeto|deu entrada)\b/i.test(contexto);
 }
 
 function extrairProposicoesDoTexto(titulo, texto) {
@@ -835,7 +869,7 @@ async function buscarLinksNoticiasFallback() {
   for (const termo of buscas) {
     const url = `${SITE_ALEP_BASE}/search?query=${encodeURIComponent(termo)}`;
     console.log(`🛟 Fallback ALEP: buscando notícias por "${termo}"...`);
-    const response = await fetch(url);
+    const response = await fetch(url, { signal: AbortSignal.timeout(FALLBACK_FETCH_TIMEOUT_MS) });
     if (!response.ok) {
       console.log(`⚠️ Fallback ALEP: busca retornou ${response.status} para ${termo}`);
       continue;
@@ -866,7 +900,7 @@ async function buscarProposicoesFallbackNoticias(estado = {}) {
   console.log(`🛟 Fallback ALEP: analisando ${links.length} notícia(s) oficial(is)...`);
   for (const url of links) {
     try {
-      const response = await fetch(url);
+      const response = await fetch(url, { signal: AbortSignal.timeout(FALLBACK_FETCH_TIMEOUT_MS) });
       if (!response.ok) {
         console.log(`⚠️ Fallback ALEP: artigo ${response.status} — ${url}`);
         continue;
@@ -954,19 +988,21 @@ function normalizarProposicao(p) {
       console.log(`⚠️ Fallback ALEP também falhou: ${erroFallback.message}`);
     }
 
-    if (fallback.length > 0) {
+    if (fallback.length > 0 && FALLBACK_NOTICIAS_ENVIA_EMAIL) {
       proposicoesRaw = fallback;
       fonteUsada = 'fallback-noticias-alep';
       estado.ultimo_fallback = {
         data: new Date().toISOString(),
         fonte: fonteUsada,
         total_extraido: fallback.length,
+        modo: 'email_habilitado',
       };
     } else {
       estado.ultimo_fallback = {
         data: new Date().toISOString(),
         fonte: 'fallback-noticias-alep',
-        total_extraido: 0,
+        total_extraido: fallback.length,
+        modo: 'auditoria_sem_envio',
       };
 
     const ultimoAlertaMs = estado.ultimo_alerta_falha ? Date.parse(estado.ultimo_alerta_falha) : 0;

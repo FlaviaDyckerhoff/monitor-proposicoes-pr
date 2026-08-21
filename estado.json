@@ -2690,7 +2690,7 @@
     131297,
     131304
   ],
-  "ultima_execucao": "2026-08-21T08:35:32.265Z",
+  "ultima_execucao": "2026-08-21T20:00:19.854Z",
   "ultima_falha": {
     "data": "2026-08-12T08:37:02.534Z",
     "fonte": "api-public-alep",
@@ -3485,7 +3485,7 @@
     "REQ-2076-2026",
     "REQ-2077-2026"
   ],
-  "ultima_sucesso_api": "2026-08-21T08:35:32.265Z",
+  "ultima_sucesso_api": "2026-08-21T20:00:19.854Z",
   "ultimo_fallback": {
     "data": "2026-08-12T08:37:10.106Z",
     "fonte": "fallback-noticias-alep",

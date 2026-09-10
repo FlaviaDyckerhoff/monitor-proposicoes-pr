@@ -52,7 +52,7 @@ const FALLBACK_NOTICIAS_DIAS = Number(process.env.FALLBACK_NOTICIAS_DIAS || 14);
 const FALLBACK_MAX_ARTIGOS = Number(process.env.FALLBACK_MAX_ARTIGOS || 30);
 const FALLBACK_FETCH_TIMEOUT_MS = Number(process.env.FALLBACK_FETCH_TIMEOUT_MS || 12000);
 const API_JANELA_DIAS = Number(process.env.API_JANELA_DIAS || 21);
-const API_NUMERO_MAXIMO_REGISTRO = Number(process.env.API_NUMERO_MAXIMO_REGISTRO || 500);
+const API_NUMERO_MAXIMO_REGISTRO = Number(process.env.API_NUMERO_MAXIMO_REGISTRO || 5000);
 const API_DATA_INICIAL = process.env.API_DATA_INICIAL || '';
 const API_DATA_FINAL = process.env.API_DATA_FINAL || '';
 const TIPOS_INCLUIR = process.env.TIPOS_INCLUIR || '';
@@ -706,17 +706,13 @@ async function enviarEmailFalhaFonte(erro) {
 async function buscarProposicoesApi() {
   const hoje = new Date();
   const ano = hoje.getFullYear();
-  const dataFinal = API_DATA_FINAL || dataLocalIso(hoje);
-  const dataInicial = API_DATA_INICIAL || subtrairDiasLocal(hoje, API_JANELA_DIAS);
 
   const body = {
     ano: ano,
     numeroMaximoRegistro: API_NUMERO_MAXIMO_REGISTRO,
-    dataInicial,
-    dataFinal,
   };
 
-  console.log(`🔍 Buscando proposições de ${ano}, janela ${dataInicial} a ${dataFinal}...`);
+  console.log(`🔍 Buscando proposições de ${ano}; a janela será filtrada localmente...`);
 
   const response = await fetch(`${API_BASE}/proposicao/filtrar`, {
     method: 'POST',
@@ -1026,8 +1022,18 @@ function normalizarProposicao(p) {
   console.log(`📊 Total normalizado: ${proposicoes.length}`);
   console.log(`📡 Fonte usada: ${fonteUsada}`);
 
+  const dataInicial = API_DATA_INICIAL || subtrairDiasLocal(new Date(), API_JANELA_DIAS);
+  const dataFinal = API_DATA_FINAL || dataLocalIso(new Date());
+  const proposicoesNaJanela = fonteUsada === 'api-public-alep'
+    ? proposicoes.filter(p => {
+        const data = dataIsoProposicao(p);
+        return data && data >= dataInicial && data <= dataFinal;
+      })
+    : proposicoes;
+  console.log(`📅 Janela local ${dataInicial} a ${dataFinal}: ${proposicoesNaJanela.length} proposição(ões)`);
+
   const tiposPermitidos = tiposIncluidosSet();
-  const novasBrutas = proposicoes.filter(p => !idsVistos.has(p.id) && (!p.chave || !chavesVistas.has(p.chave)));
+  const novasBrutas = proposicoesNaJanela.filter(p => !idsVistos.has(p.id) && (!p.chave || !chavesVistas.has(p.chave)));
   const novas = [];
   const marcadasSemEmail = [];
   for (const p of novasBrutas) {
